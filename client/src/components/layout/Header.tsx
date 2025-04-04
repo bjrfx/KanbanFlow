@@ -22,6 +22,7 @@ import {
   Settings, 
   Sun
 } from "lucide-react";
+import { ReactNode } from "react";
 import { Board as BoardType, getUserBoards } from "@/lib/firestore";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
@@ -32,9 +33,11 @@ interface HeaderProps {
   toggleSidebar: () => void;
   currentBoardId?: string;
   selectedBoard?: BoardType;
+  title?: string;
+  icon?: ReactNode;
 }
 
-export function Header({ toggleSidebar, currentBoardId, selectedBoard }: HeaderProps) {
+export function Header({ toggleSidebar, currentBoardId, selectedBoard, title, icon }: HeaderProps) {
   const { user, logoutMutation } = useAuth();
   const { toast } = useToast();
   const { theme, setTheme, isDarkMode } = useTheme();
@@ -94,9 +97,11 @@ export function Header({ toggleSidebar, currentBoardId, selectedBoard }: HeaderP
           {/* Logo and title */}
           <div className="flex items-center">
             <div className="h-8 w-8 bg-primary rounded flex items-center justify-center mr-2">
-              <Columns className="h-4 w-4 text-white" />
+              {icon ? icon : <Columns className="h-4 w-4 text-white" />}
             </div>
-            <h1 className="text-lg font-semibold text-gray-900 dark:text-white hidden sm:block">Kanban</h1>
+            <h1 className="text-lg font-semibold text-gray-900 dark:text-white hidden sm:block">
+              {title ? title : "Kanban"}
+            </h1>
           </div>
         </div>
         

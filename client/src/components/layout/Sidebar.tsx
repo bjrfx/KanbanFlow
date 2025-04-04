@@ -118,13 +118,22 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <CheckSquare className="mr-3 h-4 w-4 text-gray-400 dark:text-gray-500" />
                 My Tasks
               </button>
-              <button 
-                onClick={() => handleComingSoon("Calendar")}
-                className="w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-              >
-                <Calendar className="mr-3 h-4 w-4 text-gray-400 dark:text-gray-500" />
-                Calendar
-              </button>
+              <Link href="/calendar">
+                <a className={cn(
+                  "flex items-center px-3 py-2 text-sm font-medium rounded-md",
+                  currentPath === "calendar" ? 
+                    "bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400" : 
+                    "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                )} onClick={() => isMobile && onClose()}>
+                  <Calendar className={cn(
+                    "mr-3 h-4 w-4",
+                    currentPath === "calendar" ? 
+                      "text-primary-500" : 
+                      "text-gray-400 dark:text-gray-500"
+                  )} />
+                  Calendar
+                </a>
+              </Link>
             </div>
           </div>
           

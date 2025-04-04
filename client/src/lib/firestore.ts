@@ -505,3 +505,31 @@ export async function removeBoardMember(memberId: string) {
     throw error;
   }
 }
+
+// Calendar helpers
+export async function getBoardsWithTasks(userId: string) {
+  try {
+    console.log("Getting boards with tasks for user:", userId);
+    
+    // Get user's boards
+    const boards = await getUserBoards(userId);
+    console.log(`Found ${boards.length} boards for user`);
+    
+    // For each board, get all tasks
+    const boardsWithTasks = await Promise.all(
+      boards.map(async (board) => {
+        const tasks = await getBoardTasks(board.id);
+        return {
+          ...board,
+          tasks
+        };
+      })
+    );
+    
+    console.log("Boards with tasks:", boardsWithTasks);
+    return boardsWithTasks;
+  } catch (error) {
+    console.error("Error getting boards with tasks:", error);
+    throw error;
+  }
+}

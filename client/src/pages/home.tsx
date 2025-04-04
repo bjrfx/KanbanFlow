@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ClipboardList, Loader2, Plus } from "lucide-react";
+import { ClipboardList, Loader2, Plus, Columns } from "lucide-react";
 import { useLocation } from "wouter";
 import { queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
@@ -90,7 +90,11 @@ export default function Home() {
       
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header toggleSidebar={toggleSidebar} />
+        <Header 
+          toggleSidebar={toggleSidebar}
+          title="My Dashboard"
+          icon={<Columns className="h-4 w-4 text-white" />}
+        />
         
         <main className="flex-1 overflow-auto p-4 sm:p-6">
           <div className="max-w-6xl mx-auto">
