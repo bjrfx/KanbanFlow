@@ -9,7 +9,9 @@ import {
   query, 
   where, 
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  onSnapshot,
+  orderBy
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -532,4 +534,165 @@ export async function getBoardsWithTasks(userId: string) {
     console.error("Error getting boards with tasks:", error);
     throw error;
   }
+}
+
+// Real-time listeners
+export function onBoardChange(boardId: string, callback: (board: Board) => void) {
+  console.log(`Setting up real-time listener for board ${boardId}`);
+  
+  const boardRef = doc(db, "boards", boardId);
+  
+  return onSnapshot(boardRef, (snapshot) => {
+    if (snapshot.exists()) {
+      const boardData = { id: snapshot.id, ...snapshot.data() } as Board;
+      console.log(`Board ${boardId} updated:`, boardData);
+      callback(boardData);
+    } else {
+      console.log(`Board ${boardId} does not exist`);
+    }
+  }, (error) => {
+    console.error(`Error in board ${boardId} listener:`, error);
+  });
+}
+
+export function onBoardColumnsChange(boardId: string, callback: (columns: Column[]) => void) {
+  console.log(`Setting up real-time listener for columns in board ${boardId}`);
+  
+  const columnsQuery = query(
+    collection(db, "columns"),
+    where("boardId", "==", boardId),
+    orderBy("order")
+  );
+  
+  return onSnapshot(columnsQuery, (snapshot) => {
+    const columns = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Column[];
+    
+    console.log(`Columns for board ${boardId} updated:`, columns);
+    callback(columns);
+  }, (error) => {
+    console.error(`Error in columns listener for board ${boardId}:`, error);
+  });
+}
+
+export function onColumnTasksChange(columnId: string, callback: (tasks: Task[]) => void) {
+  console.log(`Setting up real-time listener for tasks in column ${columnId}`);
+  
+  const tasksQuery = query(
+    collection(db, "tasks"),
+    where("columnId", "==", columnId),
+    orderBy("order")
+  );
+  
+  return onSnapshot(tasksQuery, (snapshot) => {
+    const tasks = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Task[];
+    
+    console.log(`Tasks for column ${columnId} updated:`, tasks);
+    callback(tasks);
+  }, (error) => {
+    console.error(`Error in tasks listener for column ${columnId}:`, error);
+  });
+}
+
+export function onBoardTasksChange(boardId: string, callback: (tasks: Task[]) => void) {
+  console.log(`Setting up real-time listener for all tasks in board ${boardId}`);
+  
+  const tasksQuery = query(
+    collection(db, "tasks"),
+    where("boardId", "==", boardId)
+  );
+  
+  return onSnapshot(tasksQuery, (snapshot) => {
+    const tasks = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Task[];
+    
+    console.log(`All tasks for board ${boardId} updated:`, tasks);
+    callback(tasks);
+  }, (error) => {
+    console.error(`Error in all tasks listener for board ${boardId}:`, error);
+  });
+}
+
+export function onUserBoardsChange(userId: string, callback: (boards: Board[]) => void) {
+  console.log(`Setting up real-time listener for boards of user ${userId}`);
+  
+  // We need two listeners and need to combine their results
+  
+  // 1. Listen for boards created by the user
+  const ownedBoardsQuery = query(
+    collection(db, "boards"),
+    where("createdBy", "==", userId)
+  );
+  
+  // 2. Listen for board memberships
+  const membershipsQuery = query(
+    collection(db, "boardMembers"),
+    where("userId", "==", userId)
+  );
+  
+  let ownedBoards: Board[] = [];
+  let memberBoards: Board[] = [];
+  let membershipBoardIds: string[] = [];
+  
+  // Set up the membership listener first
+  const membershipUnsubscribe = onSnapshot(membershipsQuery, async (snapshot) => {
+    membershipBoardIds = snapshot.docs.map(doc => doc.data().boardId);
+    
+    // Get the actual board documents for membership boards that aren't already owned
+    const boardsToFetch = membershipBoardIds.filter(id => !ownedBoards.some(board => board.id === id));
+    
+    if (boardsToFetch.length > 0) {
+      memberBoards = [];
+      
+      for (const boardId of boardsToFetch) {
+        try {
+          const boardDoc = await getDoc(doc(db, "boards", boardId));
+          if (boardDoc.exists()) {
+            memberBoards.push({ id: boardDoc.id, ...boardDoc.data() } as Board);
+          }
+        } catch (error) {
+          console.error(`Error fetching board ${boardId}:`, error);
+        }
+      }
+      
+      // Combine and sort all boards
+      const allBoards = [...ownedBoards, ...memberBoards].sort((a, b) => {
+        const dateA = a.createdAt ? a.createdAt.toDate().getTime() : 0;
+        const dateB = b.createdAt ? b.createdAt.toDate().getTime() : 0;
+        return dateB - dateA;
+      });
+      
+      callback(allBoards);
+    }
+  });
+  
+  // Set up the owned boards listener
+  const ownedBoardsUnsubscribe = onSnapshot(ownedBoardsQuery, (snapshot) => {
+    ownedBoards = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Board[];
+    
+    // Combine and sort all boards
+    const allBoards = [...ownedBoards, ...memberBoards].sort((a, b) => {
+      const dateA = a.createdAt ? a.createdAt.toDate().getTime() : 0;
+      const dateB = b.createdAt ? b.createdAt.toDate().getTime() : 0;
+      return dateB - dateA;
+    });
+    
+    callback(allBoards);
+  });
+  
+  // Return a function to unsubscribe from both listeners
+  return () => {
+    membershipUnsubscribe();
+    ownedBoardsUnsubscribe();
+  };
 }

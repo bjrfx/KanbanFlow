@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/providers/auth-provider";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
@@ -13,7 +13,7 @@ import { useLocation } from "wouter";
 import { queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { Board, createBoard, getUserBoards } from "@/lib/firestore";
+import { Board, createBoard, getUserBoards, onUserBoardsChange } from "@/lib/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { Timestamp } from "firebase/firestore";
 
@@ -65,6 +65,23 @@ export default function Home() {
       });
     },
   });
+  
+  // Set up real-time listener for user boards
+  useEffect(() => {
+    if (!user) return;
+    
+    console.log("Setting up real-time listener for user boards:", user.uid);
+    
+    const unsubscribe = onUserBoardsChange(user.uid, (updatedBoards) => {
+      console.log("Boards updated:", updatedBoards);
+      queryClient.setQueryData(['boards', user.uid], updatedBoards);
+    });
+    
+    return () => {
+      console.log("Cleaning up boards listener");
+      unsubscribe();
+    };
+  }, [user]);
   
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);

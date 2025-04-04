@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
@@ -21,7 +21,11 @@ import {
   getBoardColumns, 
   getColumnTasks, 
   createTask, 
-  updateTask 
+  updateTask,
+  onBoardChange,
+  onBoardColumnsChange,
+  onColumnTasksChange,
+  onBoardTasksChange
 } from "@/lib/firestore";
 import { useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -187,28 +191,61 @@ export default function Board() {
   
   // Handle drag and drop
   const handleDragEnd = async (result: any) => {
+    console.log("Drag ended with result:", result);
     const { source, destination, draggableId } = result;
     
     // Dropped outside a droppable area
-    if (!destination) return;
+    if (!destination) {
+      console.log("Dropped outside droppable area");
+      return;
+    }
     
     // Dropped in the same position
     if (
       source.droppableId === destination.droppableId && 
       source.index === destination.index
-    ) return;
+    ) {
+      console.log("Dropped in same position");
+      return;
+    }
     
     // Get the task and columns
     const sourceColumnId = source.droppableId;
     const destColumnId = destination.droppableId;
     const taskId = draggableId;
     
+    console.log(`Moving task ${taskId} from column ${sourceColumnId} to ${destColumnId}`);
+    console.log(`From index ${source.index} to index ${destination.index}`);
+    
+    if (!tasksData) {
+      console.error("tasksData is not available");
+      return;
+    }
+    
     // Create updated tasks array
     const newTasksData = {...tasksData};
+    
+    // Make sure the source column exists in tasksData
+    if (!newTasksData[sourceColumnId]) {
+      console.error(`Source column ${sourceColumnId} not found in tasksData`);
+      return;
+    }
+    
+    // Make sure the destination column exists in tasksData
+    if (!newTasksData[destColumnId]) {
+      console.error(`Destination column ${destColumnId} not found in tasksData`);
+      // Initialize the destination column if it doesn't exist
+      newTasksData[destColumnId] = [];
+    }
     
     // Remove from source column
     const sourceTasks = [...newTasksData[sourceColumnId]];
     const [movedTask] = sourceTasks.splice(source.index, 1);
+    if (!movedTask) {
+      console.error("Task not found at source index");
+      return;
+    }
+    
     newTasksData[sourceColumnId] = sourceTasks;
     
     // Add to destination column
@@ -216,11 +253,14 @@ export default function Board() {
       // Same column, reorder
       sourceTasks.splice(destination.index, 0, movedTask);
       newTasksData[sourceColumnId] = sourceTasks;
+      console.log("Task reordered within same column");
     } else {
       // Different column
-      const destTasks = [...newTasksData[destColumnId]];
-      destTasks.splice(destination.index, 0, {...movedTask, columnId: destColumnId});
+      const destTasks = [...(newTasksData[destColumnId] || [])];
+      const updatedTask = {...movedTask, columnId: destColumnId};
+      destTasks.splice(destination.index, 0, updatedTask);
       newTasksData[destColumnId] = destTasks;
+      console.log("Task moved to different column");
     }
     
     // Update the order numbers
@@ -236,11 +276,14 @@ export default function Board() {
       }));
     }
     
+    console.log("New tasksData:", newTasksData);
+    
     // Optimistically update the UI
     queryClient.setQueryData(['tasks', id], newTasksData);
     
     // Update in the database
     try {
+      console.log(`Updating task ${taskId} in database`);
       await updateTaskMutation.mutateAsync({ 
         taskId,
         data: {
@@ -248,9 +291,20 @@ export default function Board() {
           order: destination.index
         }
       });
-    } catch (error) {
-      // If update fails, revert to the original state
+      console.log("Task update successful");
+      
+      // Force a refetch to ensure data consistency
+      await queryClient.invalidateQueries({ queryKey: ['tasks', id] });
+    } catch (error: any) {
+      console.error("Error updating task position:", error);
+      // Revert to original state on error
       queryClient.invalidateQueries({ queryKey: ['tasks', id] });
+      
+      toast({
+        title: "Error moving task",
+        description: error.message || "There was a problem updating the task position. Please try again.",
+        variant: "destructive",
+      });
     }
   };
   
@@ -291,6 +345,61 @@ export default function Board() {
     setEditedTaskDescription(task.description || "");
     setIsEditingTask(true);
   };
+  
+  // Set up real-time listeners for the board, columns, and tasks
+  useEffect(() => {
+    if (!id || !board) return;
+    
+    console.log("Setting up real-time listeners for board:", id);
+    
+    // Set up listeners
+    const boardUnsubscribe = onBoardChange(id, (updatedBoard) => {
+      console.log("Board updated:", updatedBoard);
+      queryClient.setQueryData(['board', id], updatedBoard);
+    });
+    
+    const columnsUnsubscribe = onBoardColumnsChange(id, (updatedColumns) => {
+      console.log("Columns updated:", updatedColumns);
+      queryClient.setQueryData(['columns', id], updatedColumns);
+    });
+    
+    const tasksUnsubscribe = onBoardTasksChange(id, (allTasks) => {
+      console.log("All tasks updated:", allTasks);
+      
+      // Group tasks by column
+      const tasksByColumn: {[columnId: string]: TaskType[]} = {};
+      
+      // Initialize with all known columns
+      if (columns) {
+        columns.forEach(column => {
+          tasksByColumn[column.id] = [];
+        });
+      }
+      
+      // Populate tasks by column
+      allTasks.forEach(task => {
+        if (!tasksByColumn[task.columnId]) {
+          tasksByColumn[task.columnId] = [];
+        }
+        tasksByColumn[task.columnId].push(task);
+      });
+      
+      // Sort tasks by order within each column
+      Object.keys(tasksByColumn).forEach(columnId => {
+        tasksByColumn[columnId].sort((a, b) => a.order - b.order);
+      });
+      
+      queryClient.setQueryData(['tasks', id], tasksByColumn);
+    });
+    
+    // Clean up listeners when component unmounts
+    return () => {
+      console.log("Cleaning up real-time listeners");
+      boardUnsubscribe();
+      columnsUnsubscribe();
+      tasksUnsubscribe();
+    };
+  }, [id, board, columns]);
   
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -351,7 +460,7 @@ export default function Board() {
         />
         
         {/* Board View with DnD */}
-        <div className="flex-1 overflow-auto p-4">
+        <div className="flex-1 overflow-auto p-4 pb-24 sm:pb-4">
           {isColumnsLoading || isTasksLoading ? (
             <div className="flex items-center justify-center w-full h-full">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
