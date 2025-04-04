@@ -33,7 +33,7 @@ export async function login(credentials: LoginCredentials): Promise<{ user: User
 
 // Logout current user
 export async function logout(): Promise<void> {
-  await apiRequest('GET', '/api/auth/logout');
+  await apiRequest('POST', '/api/auth/logout');
 }
 
 // Get current authenticated user

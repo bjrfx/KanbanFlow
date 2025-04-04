@@ -43,14 +43,14 @@ export function KanbanBoard({ boardId }: KanbanBoardProps) {
       : true;
     
     // Status filter
-    const matchesStatus = statusFilter 
-      ? boardData.columns.find(col => col.id === task.columnId)?.id.toString() === statusFilter
-      : true;
+    const matchesStatus = statusFilter === "all" || !statusFilter
+      ? true 
+      : boardData.columns.find(col => col.id === task.columnId)?.id.toString() === statusFilter;
     
     // Priority filter
-    const matchesPriority = priorityFilter
-      ? task.priority === priorityFilter
-      : true;
+    const matchesPriority = priorityFilter === "all" || !priorityFilter
+      ? true
+      : task.priority === priorityFilter;
     
     return matchesSearch && matchesStatus && matchesPriority;
   }) || [];
@@ -194,9 +194,9 @@ export function KanbanBoard({ boardId }: KanbanBoardProps) {
           <div className="flex -space-x-2 mr-2">
             {boardData.members.slice(0, 3).map((member) => (
               <Avatar key={member.userId} className="h-8 w-8 border-2 border-white dark:border-gray-800">
-                <AvatarImage src={member.user.avatar} alt={member.user.username} />
+                <AvatarImage src={member.user?.avatar || undefined} alt={member.user?.username || 'User'} />
                 <AvatarFallback className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-                  {member.user.username.charAt(0).toUpperCase()}
+                  {member.user?.username ? member.user.username.charAt(0).toUpperCase() : 'U'}
                 </AvatarFallback>
               </Avatar>
             ))}
@@ -260,7 +260,7 @@ export function KanbanBoard({ boardId }: KanbanBoardProps) {
               <SelectValue placeholder="All statuses" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All statuses</SelectItem>
+              <SelectItem value="all">All statuses</SelectItem>
               {sortedColumns.map((column) => (
                 <SelectItem key={column.id} value={column.id.toString()}>
                   {column.name}
@@ -275,7 +275,7 @@ export function KanbanBoard({ boardId }: KanbanBoardProps) {
               <SelectValue placeholder="All priorities" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All priorities</SelectItem>
+              <SelectItem value="all">All priorities</SelectItem>
               <SelectItem value="high">High</SelectItem>
               <SelectItem value="medium">Medium</SelectItem>
               <SelectItem value="low">Low</SelectItem>

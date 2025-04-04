@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
 import { useToast } from "./use-toast";
+import { useLocation } from "wouter";
 
 // User type matching with the server response
 interface User {
@@ -24,6 +25,7 @@ type AuthContextType = {
   logoutMutation: UseMutationResult<void, Error, void>;
   registerMutation: UseMutationResult<{ token: string; user: User; defaultBoardId: number }, Error, RegisterData>;
   isAuthenticated: boolean;
+  logout: () => Promise<void>;
 };
 
 type LoginData = {
@@ -42,6 +44,7 @@ export const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const {
     data: userData,
     error,
@@ -109,6 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         title: "Logged out",
         description: "You have been successfully logged out",
       });
+      navigate("/auth");
     },
     onError: (error: Error) => {
       toast({
@@ -118,6 +122,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     },
   });
+
+  // Add convenience methods
+  const logout = async () => {
+    await logoutMutation.mutateAsync();
+    navigate("/auth");
+  };
 
   return (
     <AuthContext.Provider
@@ -129,6 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logoutMutation,
         registerMutation,
         isAuthenticated,
+        logout,
       }}
     >
       {children}
