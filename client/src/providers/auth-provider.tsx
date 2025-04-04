@@ -4,7 +4,7 @@ import {
   useMutation,
   UseMutationResult,
 } from "@tanstack/react-query";
-import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
+import { apiRequest, queryClient } from "../lib/queryClient";
 import { useToast } from "../hooks/use-toast";
 import { z } from "zod";
 import { useLocation } from "wouter";
@@ -28,6 +28,7 @@ export type AuthContextType = {
   logoutMutation: UseMutationResult<void, Error, void>;
   registerMutation: UseMutationResult<RegisterResponse, Error, RegisterData>;
   googleLogin: () => void;
+  isAuthenticated: boolean;
 };
 
 export type LoginData = {
@@ -160,6 +161,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = "/api/auth/google";
   }
 
+  const isAuthenticated = !!user;
+
   return (
     <AuthContext.Provider
       value={{
@@ -170,9 +173,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logoutMutation,
         registerMutation,
         googleLogin,
+        isAuthenticated,
       }}
     >
       {children}
     </AuthContext.Provider>
   );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
 }

@@ -1,14 +1,13 @@
-import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
-import * as schema from "@shared/schema";
+// Import MongoDB connection
+import { connectToDatabase } from './mongodb';
 
-// Create a PostgreSQL connection pool
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-  max: 10,
-});
-
-// Create a Drizzle instance using the pool and schema
-export const db = drizzle(pool, { schema });
-export { pool };
+// Connect to MongoDB
+export async function setupDatabase() {
+  try {
+    await connectToDatabase();
+    console.log('Database connection established successfully');
+  } catch (error) {
+    console.error('Error setting up database:', error);
+    throw error;
+  }
+}

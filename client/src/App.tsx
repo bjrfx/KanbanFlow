@@ -8,7 +8,7 @@ import { ProtectedRoute } from "./lib/protected-route";
 import AuthPage from "./pages/auth-page";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
-import { AuthProvider } from "./hooks/AuthProvider";
+import { AuthProvider } from "./providers/auth-provider";
 
 function Router() {
   return (

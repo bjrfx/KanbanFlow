@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAuth } from "../hooks/AuthProvider";
+import { useAuth } from "../providers/auth-provider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card,

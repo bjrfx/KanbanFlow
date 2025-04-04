@@ -1,4 +1,4 @@
-import { useAuth } from "../hooks/AuthProvider";
+import { useAuth } from "../providers/auth-provider";
 import { Loader2 } from "lucide-react";
 import { Redirect, Route } from "wouter";
 
