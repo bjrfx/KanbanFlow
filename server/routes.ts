@@ -1,9 +1,9 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import session from "express-session";
-import MemoryStore from "memorystore";
-import { setupAuth, hashPassword } from "./auth";
+import cookieParser from "cookie-parser";
+import jwt from "jsonwebtoken";
+import { generateToken, authenticateJWT, hashPassword, comparePasswords } from "./jwt-auth";
 import { writeServiceWorkerFile } from "./service-worker";
 import { setupWebPush, getVapidPublicKey, sendTaskAssignedNotification, sendBoardInviteNotification } from "./webpush";
 import { z } from "zod";
@@ -30,25 +30,31 @@ declare global {
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
-  // Initialize session store
-  const SessionStore = MemoryStore(session);
-  app.use(session({
-    secret: process.env.SESSION_SECRET || 'kanban-secret',
-    resave: false,
-    saveUninitialized: false,
-    store: new SessionStore({
-      checkPeriod: 86400000 // 24 hours
-    }),
-    cookie: {
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 1 week
-    }
-  }));
+  // Setup cookie parser
+  app.use(cookieParser());
   
-  // Setup authentication
-  const passport = setupAuth();
-  app.use(passport.initialize());
-  app.use(passport.session());
+  // Auth middleware using JWT
+  const isAuthenticated = (req: Request, res: Response, next: NextFunction) => {
+    const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+    
+    try {
+      const decoded = jwt.verify(token, process.env.SESSION_SECRET || 'your-secret-key') as { 
+        id: number; 
+        email: string; 
+        username: string; 
+      };
+      
+      // Attach user to request
+      req.user = decoded;
+      return next();
+    } catch (error) {
+      return res.status(401).json({ message: 'Invalid or expired token' });
+    }
+  };
   
   // Setup web push
   const webpush = setupWebPush();
@@ -56,17 +62,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Generate service worker
   writeServiceWorkerFile();
   
-  // Auth middleware
-  const isAuthenticated = (req: Request, res: Response, next: Function) => {
-    if (req.isAuthenticated()) {
-      return next();
-    }
-    res.status(401).json({ message: 'Unauthorized' });
-  };
-  
   // API routes
   
-  // Auth routes
+  // Auth routes with JWT
   app.post('/api/auth/register', async (req, res) => {
     try {
       // Validate request body
@@ -103,15 +101,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ownerId: user.id
       });
       
-      // Log in the user
-      req.login(user, (err) => {
-        if (err) {
-          return res.status(500).json({ message: 'Error logging in' });
-        }
-        return res.status(201).json({ 
-          user: { id: user.id, email: user.email, username: user.username },
-          defaultBoardId: defaultBoard.id
-        });
+      // Generate JWT token
+      const token = generateToken(user);
+      
+      // Set token in HTTP-only cookie
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 24 * 60 * 60 * 1000 // 1 day
+      });
+      
+      return res.status(201).json({ 
+        token,
+        user: { id: user.id, email: user.email, username: user.username },
+        defaultBoardId: defaultBoard.id
       });
     } catch (error: any) {
       if (error.errors) {
@@ -121,64 +124,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  app.post('/api/auth/login', (req, res, next) => {
-    passport.authenticate('local', (err, user, info) => {
-      if (err) {
-        return next(err);
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({ message: 'Email and password are required' });
       }
-      if (!user) {
-        return res.status(401).json({ message: info?.message || 'Invalid credentials' });
+      
+      // Find user by email
+      const user = await storage.getUserByEmail(email);
+      
+      if (!user || !user.password) {
+        return res.status(401).json({ message: 'Invalid credentials' });
       }
-      req.login(user, (err) => {
-        if (err) {
-          return next(err);
-        }
-        return res.json({ 
-          user: { id: user.id, email: user.email, username: user.username }
-        });
+      
+      // Verify password
+      const isPasswordValid = await comparePasswords(password, user.password);
+      
+      if (!isPasswordValid) {
+        return res.status(401).json({ message: 'Invalid credentials' });
+      }
+      
+      // Generate JWT token
+      const token = generateToken(user);
+      
+      // Set token in HTTP-only cookie
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 24 * 60 * 60 * 1000 // 1 day
       });
-    })(req, res, next);
+      
+      return res.json({
+        token,
+        user: { 
+          id: user.id, 
+          email: user.email, 
+          username: user.username,
+          avatar: user.avatar
+        }
+      });
+    } catch (error) {
+      console.error('Login error:', error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
   });
   
-  app.get('/api/auth/google', passport.authenticate('google', {
-    scope: ['profile', 'email']
-  }));
+  // We'll implement Google OAuth later with Firebase
+  // For now, we'll use JWT-based authentication
   
-  app.get('/api/auth/google/callback', 
-    passport.authenticate('google', { failureRedirect: '/login' }),
-    (req, res) => {
-      res.redirect('/');
-    }
-  );
-  
-  // POST endpoint for logout
+  // Logout endpoint
   app.post('/api/auth/logout', (req, res) => {
-    req.logout((err) => {
-      if (err) return res.status(500).json({ message: 'Error logging out' });
-      res.status(200).json({ success: true });
-    });
+    // Clear the token cookie
+    res.clearCookie('token');
+    res.status(200).json({ success: true });
   });
   
   // Maintain GET endpoint for backward compatibility
   app.get('/api/auth/logout', (req, res) => {
-    req.logout((err) => {
-      if (err) return res.status(500).json({ message: 'Error logging out' });
-      res.status(200).json({ success: true });
-    });
+    // Clear the token cookie
+    res.clearCookie('token');
+    res.status(200).json({ success: true });
   });
   
-  app.get('/api/auth/user', (req, res) => {
-    if (req.isAuthenticated()) {
-      return res.json({ 
-        user: { 
-          id: req.user.id, 
-          email: req.user.email, 
-          username: req.user.username,
-          avatar: req.user.avatar
-        } 
-      });
+  // Get current user
+  app.get('/api/auth/user', authenticateJWT, (req, res) => {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Not authenticated' });
     }
-    return res.status(401).json({ message: 'Not authenticated' });
+    
+    return res.json({ 
+      user: { 
+        id: req.user.id, 
+        email: req.user.email, 
+        username: req.user.username
+      } 
+    });
   });
   
   // Board routes
