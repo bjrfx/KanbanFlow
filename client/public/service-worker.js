@@ -1,6 +1,6 @@
 
 // Kanban PWA Service Worker
-const CACHE_NAME = 'kanban-pwa-v1-1743774641550';
+const CACHE_NAME = 'kanban-pwa-v1-1743775743460';
 const CACHE_STATIC_RESOURCES = [
   '/',
   '/index.html',

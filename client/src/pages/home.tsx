@@ -96,7 +96,7 @@ export default function Home() {
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Boards</h1>
-              <Button onClick={() => setIsCreatingBoard(true)}>
+              <Button onClick={() => setIsCreatingBoard(true)} data-new-board-button="true">
                 <Plus className="mr-2 h-4 w-4" />
                 New Board
               </Button>

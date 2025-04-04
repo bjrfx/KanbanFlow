@@ -17,40 +17,43 @@ import {
   LogOut, 
   Menu, 
   Moon, 
+  Plus,
   Search, 
   Settings, 
-  Sun, 
-  User 
+  Sun
 } from "lucide-react";
-import { Board } from "@/types";
+import { Board as BoardType, getUserBoards } from "@/lib/firestore";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 interface HeaderProps {
   toggleSidebar: () => void;
-  currentBoardId?: number;
-  selectedBoard?: Board;
+  currentBoardId?: string;
+  selectedBoard?: BoardType;
 }
 
 export function Header({ toggleSidebar, currentBoardId, selectedBoard }: HeaderProps) {
   const { user, logoutMutation } = useAuth();
+  const { toast } = useToast();
   const { theme, setTheme, isDarkMode } = useTheme();
   const [showBoardSelector, setShowBoardSelector] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [, navigate] = useLocation();
   
-  // Fetch all boards for dropdown
-  const { data: boards } = useQuery<Board[]>({
-    queryKey: ['/api/boards'],
-    enabled: showBoardSelector || !!currentBoardId
+  // Fetch all boards for dropdown from Firestore
+  const { data: boards } = useQuery<BoardType[]>({
+    queryKey: ['boards', user?.uid],
+    queryFn: () => user ? getUserBoards(user.uid) : Promise.resolve([]),
+    enabled: (showBoardSelector || !!currentBoardId) && !!user
   });
   
   const toggleBoardSelector = () => {
     setShowBoardSelector(!showBoardSelector);
   };
   
-  const selectBoard = (boardId: number) => {
+  const selectBoard = (boardId: string) => {
     navigate(`/board/${boardId}`);
     setShowBoardSelector(false);
   };
@@ -67,16 +70,11 @@ export function Header({ toggleSidebar, currentBoardId, selectedBoard }: HeaderP
     await logoutMutation.mutateAsync();
   };
   
-  const openSearch = () => {
-    // TODO: Implement search functionality
-  };
-  
-  const openNotifications = () => {
-    // TODO: Implement notifications functionality
-  };
-  
-  const openUserSettings = () => {
-    // TODO: Implement user settings
+  const handleComingSoon = (feature: string) => {
+    toast({
+      title: "Coming Soon",
+      description: `The ${feature} feature will be available in a future update.`,
+    });
   };
   
   return (
@@ -120,18 +118,26 @@ export function Header({ toggleSidebar, currentBoardId, selectedBoard }: HeaderP
                     <div className="flex items-center justify-between w-full">
                       <span>{board.name}</span>
                       <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {new Date(board.updatedAt).toLocaleDateString()}
+                        {board.updatedAt.toDate().toLocaleDateString()}
                       </span>
                     </div>
                   </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/" className="w-full flex items-center">
-                    <span className="flex items-center text-primary">
-                      <span className="i-plus mr-2"></span> Create new board
-                    </span>
-                  </Link>
+                <DropdownMenuItem onClick={() => {
+                  navigate("/");
+                  
+                  // Small delay to allow navigation to complete
+                  setTimeout(() => {
+                    // Find the "New Board" button element and click it
+                    const newBoardBtn = document.querySelector('[data-new-board-button="true"]');
+                    if (newBoardBtn) {
+                      (newBoardBtn as HTMLButtonElement).click();
+                    }
+                  }, 100);
+                }}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  <span>Create new board</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -141,12 +147,12 @@ export function Header({ toggleSidebar, currentBoardId, selectedBoard }: HeaderP
         {/* Right side controls */}
         <div className="flex items-center space-x-3">
           {/* Search button */}
-          <Button variant="ghost" size="icon" onClick={openSearch}>
+          <Button variant="ghost" size="icon" onClick={() => handleComingSoon("Search")}>
             <Search className="h-5 w-5 text-gray-600 dark:text-gray-300" />
           </Button>
           
           {/* Notifications button */}
-          <Button variant="ghost" size="icon" onClick={openNotifications} className="relative">
+          <Button variant="ghost" size="icon" onClick={() => handleComingSoon("Notifications")} className="relative">
             <Bell className="h-5 w-5 text-gray-600 dark:text-gray-300" />
             {/* Notification dot */}
             <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
@@ -182,7 +188,7 @@ export function Header({ toggleSidebar, currentBoardId, selectedBoard }: HeaderP
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={openUserSettings}>
+              <DropdownMenuItem onClick={() => handleComingSoon("User Settings")}>
                 <Settings className="h-4 w-4 mr-2" />
                 <span>Settings</span>
               </DropdownMenuItem>
@@ -197,15 +203,15 @@ export function Header({ toggleSidebar, currentBoardId, selectedBoard }: HeaderP
       </div>
       
       {/* Mobile board selector */}
-      {currentBoardId && (
+      {currentBoardId && boards && boards.length > 0 && (
         <div className="flex items-center justify-between px-4 py-2 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 sm:hidden">
           <div className="relative w-full">
             <select 
               className="block w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md py-2 pl-3 pr-10 text-sm focus:ring-primary-500 focus:border-primary-500" 
               value={currentBoardId}
-              onChange={(e) => selectBoard(Number(e.target.value))}
+              onChange={(e) => selectBoard(e.target.value)}
             >
-              {boards?.map((board) => (
+              {boards.map((board) => (
                 <option key={board.id} value={board.id}>{board.name}</option>
               ))}
             </select>

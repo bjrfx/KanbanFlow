@@ -1,9 +1,12 @@
 import { Button } from "@/components/ui/button";
-import { Columns, Calendar, CheckSquare, UserPlus, Users, Plus, Clipboard } from "lucide-react";
+import { Columns, Calendar, CheckSquare, UserPlus, Users, Plus, Clipboard, Loader2 } from "lucide-react";
 import { Link, useLocation } from "wouter";
-import { Board } from "@/types";
+import { Board as BoardType, getUserBoards } from "@/lib/firestore";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
+import { useState, useEffect } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -11,16 +14,35 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
-  const [location] = useLocation();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [location, navigate] = useLocation();
+  const [isMobile, setIsMobile] = useState(false);
   const currentPath = location.split('/')[1];
-  const currentBoardId = location.startsWith('/board/') ? Number(location.split('/')[2]) : null;
+  const currentBoardId = location.startsWith('/board/') ? location.split('/')[2] : null;
   
-  // Fetch user's boards
-  const { data: boards, isLoading: isLoadingBoards } = useQuery<Board[]>({
-    queryKey: ['/api/boards'],
+  // Fetch user's boards from Firestore
+  const { data: boards, isLoading: isLoadingBoards } = useQuery<BoardType[]>({
+    queryKey: ['boards', user?.uid],
+    queryFn: () => user ? getUserBoards(user.uid) : Promise.resolve([]),
+    enabled: !!user,
   });
   
-  const isMobile = window.innerWidth < 640;
+  // Check if mobile on mount and when window resizes
+  useEffect(() => {
+    const checkIfMobile = () => {
+      setIsMobile(window.innerWidth < 640);
+    };
+    
+    // Initial check
+    checkIfMobile();
+    
+    // Add event listener
+    window.addEventListener('resize', checkIfMobile);
+    
+    // Clean up
+    return () => window.removeEventListener('resize', checkIfMobile);
+  }, []);
   
   // Set the CSS classes for the sidebar based on whether it's open or not
   const sidebarClasses = cn(
@@ -37,6 +59,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     "fixed inset-0 bg-gray-900/50 z-30",
     isMobile && isOpen ? "block" : "hidden"
   );
+  
+  // Handle "Coming soon" feature clicks
+  const handleComingSoon = (feature: string) => {
+    toast({
+      title: "Coming Soon",
+      description: `The ${feature} feature will be available in a future update.`,
+    });
+  };
   
   return (
     <>
@@ -81,53 +111,81 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   Boards
                 </a>
               </Link>
-              <a href="#" className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+              <button 
+                onClick={() => handleComingSoon("My Tasks")}
+                className="w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
                 <CheckSquare className="mr-3 h-4 w-4 text-gray-400 dark:text-gray-500" />
                 My Tasks
-              </a>
-              <a href="#" className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+              </button>
+              <button 
+                onClick={() => handleComingSoon("Calendar")}
+                className="w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
                 <Calendar className="mr-3 h-4 w-4 text-gray-400 dark:text-gray-500" />
                 Calendar
-              </a>
+              </button>
             </div>
           </div>
           
           <div className="mb-6">
             <div className="flex items-center justify-between px-3">
               <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">My Boards</h2>
-              <Link href="/">
-                <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400">
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </Link>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-5 w-5 p-0 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400"
+                onClick={() => {
+                  navigate("/");
+                  // Close sidebar on mobile after navigating
+                  if (isMobile) onClose();
+                  
+                  // Small delay to allow navigation to complete
+                  setTimeout(() => {
+                    // Find the "New Board" button element and click it
+                    const newBoardBtn = document.querySelector('[data-new-board-button="true"]');
+                    if (newBoardBtn) {
+                      (newBoardBtn as HTMLButtonElement).click();
+                    }
+                  }, 100);
+                }}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
             </div>
             <div className="mt-2 space-y-1">
               {isLoadingBoards ? (
                 <div className="flex items-center justify-center py-4">
-                  <svg className="animate-spin h-5 w-5 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
                 </div>
               ) : (
-                boards?.map((board) => (
-                  <Link key={board.id} href={`/board/${board.id}`}>
-                    <a className={cn(
-                      "flex items-center px-3 py-2 text-sm font-medium rounded-md",
-                      currentBoardId === board.id ? 
-                        "bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400" : 
-                        "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                    )}>
-                      <Clipboard className={cn(
-                        "mr-3 h-4 w-4",
-                        currentBoardId === board.id ? 
-                          "text-primary-500" : 
-                          "text-gray-400 dark:text-gray-500"
-                      )} />
-                      {board.name}
-                    </a>
-                  </Link>
-                ))
+                boards && boards.length > 0 ? (
+                  boards.map((board) => (
+                    <Link key={board.id} href={`/board/${board.id}`}>
+                      <a 
+                        className={cn(
+                          "flex items-center px-3 py-2 text-sm font-medium rounded-md",
+                          currentBoardId === board.id ? 
+                            "bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400" : 
+                            "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        )}
+                        onClick={() => isMobile && onClose()}
+                      >
+                        <Clipboard className={cn(
+                          "mr-3 h-4 w-4",
+                          currentBoardId === board.id ? 
+                            "text-primary-500" : 
+                            "text-gray-400 dark:text-gray-500"
+                        )} />
+                        {board.name}
+                      </a>
+                    </Link>
+                  ))
+                ) : (
+                  <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+                    No boards yet
+                  </div>
+                )
               )}
             </div>
           </div>
@@ -135,14 +193,20 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <div>
             <h2 className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Team</h2>
             <div className="mt-2 space-y-1">
-              <a href="#" className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+              <button 
+                onClick={() => handleComingSoon("Team Members")}
+                className="w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
                 <Users className="mr-3 h-4 w-4 text-gray-400 dark:text-gray-500" />
                 Team Members
-              </a>
-              <a href="#" className="flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+              </button>
+              <button 
+                onClick={() => handleComingSoon("Invite People")}
+                className="w-full text-left flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
                 <UserPlus className="mr-3 h-4 w-4 text-gray-400 dark:text-gray-500" />
                 Invite People
-              </a>
+              </button>
             </div>
           </div>
         </nav>
