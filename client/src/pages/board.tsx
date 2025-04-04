@@ -11,7 +11,10 @@ import {
   Calendar, 
   Clock, 
   Edit, 
-  Trash
+  Trash,
+  User,
+  X,
+  Flag
 } from "lucide-react";
 import { 
   Board as BoardType, 
@@ -49,8 +52,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { queryClient } from "@/lib/queryClient";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { assignTaskToUser, unassignTaskFromUser } from "@/lib/firestore";
 
 export default function Board() {
   const { id } = useParams<{ id: string }>();
@@ -713,13 +719,144 @@ export default function Board() {
                 ) : (
                   <>
                     <div className="py-4">
-                      <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 space-x-4">
-                        {viewingTask.createdAt && (
+                      <div className="space-y-4">
+                        <div className="flex flex-col space-y-2">
+                          <h4 className="text-sm font-medium">Status</h4>
                           <div className="flex items-center">
-                            <Calendar className="h-4 w-4 mr-1" />
-                            <span>Created {viewingTask.createdAt.toDate().toLocaleDateString()}</span>
+                            <div 
+                              className="w-3 h-3 rounded-full mr-2"
+                              style={{ backgroundColor: columns?.find(col => col.id === viewingTask.columnId)?.color || 'gray' }}
+                            ></div>
+                            <span className="text-sm">
+                              {columns?.find(col => col.id === viewingTask.columnId)?.name || 'Unknown'}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex flex-col space-y-2">
+                          <h4 className="text-sm font-medium">Priority</h4>
+                          <div className="flex items-center">
+                            <span className={cn(
+                              "inline-flex items-center px-2 py-1 rounded text-xs font-medium",
+                              viewingTask.priority === 'high' 
+                                ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" 
+                                : viewingTask.priority === 'medium'
+                                  ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300"
+                                  : "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
+                            )}>
+                              <Flag className="mr-1 h-3 w-3" />
+                              {viewingTask.priority ? viewingTask.priority.charAt(0).toUpperCase() + viewingTask.priority.slice(1) : 'Low'}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {viewingTask.dueDate && (
+                          <div className="flex flex-col space-y-2">
+                            <h4 className="text-sm font-medium">Due Date</h4>
+                            <div className="flex items-center">
+                              <Calendar className="h-4 w-4 mr-1" />
+                              <span className="text-sm">
+                                {format(viewingTask.dueDate.toDate(), "PPP")}
+                              </span>
+                            </div>
                           </div>
                         )}
+                        
+                        <div className="flex flex-col space-y-2">
+                          <h4 className="text-sm font-medium">Assigned To</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {viewingTask.assignedTo && viewingTask.assignedTo.length > 0 ? (
+                              viewingTask.assignedTo.map(userId => (
+                                <div 
+                                  key={userId}
+                                  className="flex items-center bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs"
+                                >
+                                  <User className="h-3 w-3 mr-1" />
+                                  <span>{userId}</span>
+                                  <X 
+                                    className="h-3 w-3 ml-1 cursor-pointer text-gray-500 hover:text-red-500"
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      if (user) {
+                                        try {
+                                          await unassignTaskFromUser(viewingTask.id, userId);
+                                          toast({
+                                            title: "User unassigned",
+                                            description: "User has been unassigned from the task"
+                                          });
+                                        } catch (error) {
+                                          console.error("Error unassigning user:", error);
+                                          toast({
+                                            title: "Error",
+                                            description: "Could not unassign user from task",
+                                            variant: "destructive"
+                                          });
+                                        }
+                                      }
+                                    }}
+                                  />
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-sm text-gray-500 dark:text-gray-400">
+                                No users assigned
+                              </div>
+                            )}
+                          </div>
+                          <div className="mt-2">
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button variant="outline" size="sm">
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  Assign User
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-60">
+                                <div className="space-y-2">
+                                  <h3 className="font-medium text-sm">Assign to user</h3>
+                                  <Button 
+                                    className="w-full justify-start text-left"
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={async () => {
+                                      if (user) {
+                                        try {
+                                          await assignTaskToUser(viewingTask.id, user.uid, user.uid);
+                                          toast({
+                                            title: "Task assigned",
+                                            description: "Task assigned to you"
+                                          });
+                                        } catch (error) {
+                                          console.error("Error assigning task:", error);
+                                          toast({
+                                            title: "Error",
+                                            description: "Could not assign task",
+                                            variant: "destructive"
+                                          });
+                                        }
+                                      }
+                                    }}
+                                  >
+                                    <User className="h-3 w-3 mr-2" />
+                                    Assign to me
+                                  </Button>
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                        </div>
+                        
+                        <div className="flex flex-col space-y-2">
+                          <h4 className="text-sm font-medium">Created</h4>
+                          <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                            {viewingTask.createdAt && (
+                              <>
+                                <Calendar className="h-4 w-4 mr-1" />
+                                <span>{viewingTask.createdAt.toDate().toLocaleDateString()}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
                     

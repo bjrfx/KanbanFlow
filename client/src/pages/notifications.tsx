@@ -15,7 +15,8 @@ import {
   getUserNotifications, 
   markNotificationAsRead, 
   markAllNotificationsAsRead,
-  listenForUserNotifications
+  listenForUserNotifications,
+  createNotification
 } from "@/lib/firestore";
 
 export default function Notifications() {

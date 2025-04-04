@@ -492,6 +492,114 @@ export async function updateTask(taskId: string, data: Partial<Omit<Task, 'id' |
   }
 }
 
+// Task assignment functions
+export async function assignTaskToUser(taskId: string, userId: string, currentUserId: string) {
+  try {
+    const taskRef = doc(db, "tasks", taskId);
+    
+    // First, get the current task data
+    const taskSnapshot = await getDoc(taskRef);
+    if (!taskSnapshot.exists()) {
+      throw new Error("Task not found");
+    }
+    
+    const task = { id: taskSnapshot.id, ...taskSnapshot.data() } as Task;
+    
+    // Get the board to get its name
+    const boardRef = doc(db, "boards", task.boardId);
+    const boardSnapshot = await getDoc(boardRef);
+    if (!boardSnapshot.exists()) {
+      throw new Error("Board not found");
+    }
+    
+    const board = { id: boardSnapshot.id, ...boardSnapshot.data() } as { id: string; name: string; };
+    
+    // Get the assigner's name
+    const userRef = doc(db, "users", currentUserId);
+    const userSnapshot = await getDoc(userRef);
+    const userName = userSnapshot.exists() ? 
+                     userSnapshot.data().displayName || userSnapshot.data().email : 
+                     "Someone";
+    
+    // Create an array of assignedTo if it doesn't exist
+    const assignedTo = task.assignedTo || [];
+    
+    // Only add if not already assigned
+    if (!assignedTo.includes(userId)) {
+      // Update the task with the new assignee
+      const updatedAssignedTo = [...assignedTo, userId];
+      
+      await updateDoc(taskRef, {
+        assignedTo: updatedAssignedTo,
+        updatedAt: serverTimestamp()
+      });
+      
+      // Create a notification if the user is not assigning to themselves
+      if (userId !== currentUserId) {
+        // Import from notification-utils to avoid circular dependency
+        const { createTaskAssignedNotification } = await import("./notification-utils");
+        
+        await createTaskAssignedNotification(
+          userId,
+          task.title,
+          board.name,
+          task.boardId,
+          taskId,
+          userName
+        );
+      }
+      
+      return {
+        ...task,
+        assignedTo: updatedAssignedTo
+      };
+    }
+    
+    return task;
+  } catch (error) {
+    console.error("Error assigning task to user:", error);
+    throw error;
+  }
+}
+
+export async function unassignTaskFromUser(taskId: string, userId: string) {
+  try {
+    const taskRef = doc(db, "tasks", taskId);
+    
+    // First, get the current task data
+    const taskSnapshot = await getDoc(taskRef);
+    if (!taskSnapshot.exists()) {
+      throw new Error("Task not found");
+    }
+    
+    const task = { id: taskSnapshot.id, ...taskSnapshot.data() } as Task;
+    
+    // Create an array of assignedTo if it doesn't exist
+    const assignedTo = task.assignedTo || [];
+    
+    // Only remove if already assigned
+    if (assignedTo.includes(userId)) {
+      // Update the task with the new assignee list
+      const updatedAssignedTo = assignedTo.filter(id => id !== userId);
+      
+      await updateDoc(taskRef, {
+        assignedTo: updatedAssignedTo,
+        updatedAt: serverTimestamp()
+      });
+      
+      return {
+        ...task,
+        assignedTo: updatedAssignedTo
+      };
+    }
+    
+    return task;
+  } catch (error) {
+    console.error("Error unassigning task from user:", error);
+    throw error;
+  }
+}
+
 export async function deleteTask(taskId: string) {
   try {
     await deleteDoc(doc(db, "tasks", taskId));
