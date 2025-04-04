@@ -127,7 +127,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return next(err);
       }
       if (!user) {
-        return res.status(401).json({ message: info.message || 'Invalid credentials' });
+        return res.status(401).json({ message: info?.message || 'Invalid credentials' });
       }
       req.login(user, (err) => {
         if (err) {
@@ -151,9 +151,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
   
+  // POST endpoint for logout
+  app.post('/api/auth/logout', (req, res) => {
+    req.logout((err) => {
+      if (err) return res.status(500).json({ message: 'Error logging out' });
+      res.status(200).json({ success: true });
+    });
+  });
+  
+  // Maintain GET endpoint for backward compatibility
   app.get('/api/auth/logout', (req, res) => {
-    req.logout(() => {
-      res.json({ success: true });
+    req.logout((err) => {
+      if (err) return res.status(500).json({ message: 'Error logging out' });
+      res.status(200).json({ success: true });
     });
   });
   
