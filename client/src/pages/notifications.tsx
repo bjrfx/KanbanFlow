@@ -36,16 +36,29 @@ export default function Notifications() {
     
     setIsLoading(true);
     
-    // Set up real-time listener for notifications
-    const unsubscribe = listenForUserNotifications(user.uid, (fetchedNotifications) => {
-      console.log("Notifications updated:", fetchedNotifications);
-      setNotifications(fetchedNotifications);
+    let unsubscribeFunction: (() => void) | undefined;
+    
+    try {
+      // Set up real-time listener for notifications
+      unsubscribeFunction = listenForUserNotifications(user.uid, (fetchedNotifications) => {
+        console.log("Notifications updated:", fetchedNotifications);
+        setNotifications(fetchedNotifications);
+        setIsLoading(false);
+      });
+    } catch (error) {
+      console.error("Error setting up notifications listener:", error);
       setIsLoading(false);
-    });
+    }
     
     // Cleanup listener on unmount
     return () => {
-      unsubscribe();
+      try {
+        if (unsubscribeFunction) {
+          unsubscribeFunction();
+        }
+      } catch (error) {
+        console.error("Error unsubscribing from notifications:", error);
+      }
     };
   }, [user]);
   

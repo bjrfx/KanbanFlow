@@ -42,15 +42,27 @@ export function NotificationDropdown({ className }: NotificationDropdownProps) {
   useEffect(() => {
     if (!user?.uid) return;
     
-    // Set up real-time listener for notifications
-    const unsubscribe = listenForUserNotifications(user.uid, (fetchedNotifications) => {
-      console.log("Notifications updated:", fetchedNotifications);
-      setNotifications(fetchedNotifications);
-    });
+    let unsubscribeFunction: (() => void) | undefined;
+    
+    try {
+      // Set up real-time listener for notifications
+      unsubscribeFunction = listenForUserNotifications(user.uid, (fetchedNotifications) => {
+        console.log("Notifications updated:", fetchedNotifications);
+        setNotifications(fetchedNotifications);
+      });
+    } catch (error) {
+      console.error("Error setting up notifications listener:", error);
+    }
     
     // Cleanup listener on unmount
     return () => {
-      unsubscribe();
+      try {
+        if (unsubscribeFunction) {
+          unsubscribeFunction();
+        }
+      } catch (error) {
+        console.error("Error unsubscribing from notifications:", error);
+      }
     };
   }, [user]);
   
