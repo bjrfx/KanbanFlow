@@ -1,4 +1,4 @@
-import { useAuth } from "@/hooks/AuthProvider";
+import { useAuth } from "@/providers/auth-provider";
 import { useTheme } from "@/hooks/use-theme";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -34,7 +34,7 @@ interface HeaderProps {
 }
 
 export function Header({ toggleSidebar, currentBoardId, selectedBoard }: HeaderProps) {
-  const { user, logout } = useAuth();
+  const { user, logoutMutation } = useAuth();
   const { theme, setTheme, isDarkMode } = useTheme();
   const [showBoardSelector, setShowBoardSelector] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -64,7 +64,7 @@ export function Header({ toggleSidebar, currentBoardId, selectedBoard }: HeaderP
   };
   
   const handleLogout = async () => {
-    await logout();
+    await logoutMutation.mutateAsync();
   };
   
   const openSearch = () => {
