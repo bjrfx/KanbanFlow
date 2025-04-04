@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Columns, CheckSquare, Calendar, User, Plus } from "lucide-react";
+import { Columns, CheckSquare, Calendar, Bell, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
@@ -63,13 +63,15 @@ export function MobileNavigation({ onAddTask }: MobileNavigationProps) {
           </a>
         </Link>
         
-        <button 
-          onClick={handleComingSoon}
-          className="flex flex-col items-center py-2 px-4 text-gray-500 dark:text-gray-400 bg-transparent border-0"
-        >
-          <User className="h-5 w-5" />
-          <span className="text-xs mt-1">Profile</span>
-        </button>
+        <Link href="/notifications">
+          <a className={cn(
+            "flex flex-col items-center py-2 px-4",
+            path === "notifications" ? "text-primary" : "text-gray-500 dark:text-gray-400"
+          )}>
+            <Bell className="h-5 w-5" />
+            <span className="text-xs mt-1">Notifications</span>
+          </a>
+        </Link>
       </div>
     </nav>
   );

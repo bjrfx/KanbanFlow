@@ -25,6 +25,19 @@ export interface Board {
   updatedAt: Timestamp;
 }
 
+export interface Notification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  timestamp: Timestamp;
+  read: boolean;
+  type: "task" | "mention" | "due" | "system";
+  linkTo?: string;
+  boardId?: string;
+  taskId?: string;
+}
+
 export interface Column {
   id: string;
   boardId: string;
@@ -799,4 +812,124 @@ export function onUserBoardsChange(userId: string, callback: (boards: Board[]) =
     membershipUnsubscribe();
     ownedBoardsUnsubscribe();
   };
+}
+
+// Notifications
+export async function getUserNotifications(userId: string) {
+  try {
+    console.log("Getting notifications for user:", userId);
+    
+    const notificationsQuery = query(
+      collection(db, "notifications"),
+      where("userId", "==", userId),
+      orderBy("timestamp", "desc")
+    );
+    
+    const notificationsSnapshots = await getDocs(notificationsQuery);
+    console.log(`Found ${notificationsSnapshots.size} notifications for user ${userId}`);
+    
+    const notifications = notificationsSnapshots.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Notification[];
+    
+    return notifications;
+  } catch (error) {
+    console.error("Error getting user notifications:", error);
+    throw error;
+  }
+}
+
+export async function createNotification(notification: Omit<Notification, 'id' | 'timestamp'>) {
+  try {
+    console.log("Creating notification:", notification);
+    
+    // Create client-side timestamp for immediate display
+    const clientTimestamp = new Timestamp(Math.floor(Date.now() / 1000), 0);
+    
+    const notificationData = {
+      ...notification,
+      timestamp: serverTimestamp(),
+      _clientTimestamp: clientTimestamp // For immediate UI updates
+    };
+    
+    const notificationRef = await addDoc(collection(db, "notifications"), notificationData);
+    console.log("Notification created with ID:", notificationRef.id);
+    
+    // Return notification with client timestamp for immediate display
+    return {
+      id: notificationRef.id,
+      ...notification,
+      timestamp: clientTimestamp
+    } as Notification;
+  } catch (error) {
+    console.error("Error creating notification:", error);
+    throw error;
+  }
+}
+
+export async function markNotificationAsRead(notificationId: string) {
+  try {
+    const notificationRef = doc(db, "notifications", notificationId);
+    
+    await updateDoc(notificationRef, {
+      read: true
+    });
+    
+    return true;
+  } catch (error) {
+    console.error("Error marking notification as read:", error);
+    throw error;
+  }
+}
+
+export async function markAllNotificationsAsRead(userId: string) {
+  try {
+    const notificationsQuery = query(
+      collection(db, "notifications"),
+      where("userId", "==", userId),
+      where("read", "==", false)
+    );
+    
+    const notificationsSnapshots = await getDocs(notificationsQuery);
+    
+    const updatePromises = notificationsSnapshots.docs.map(doc => 
+      updateDoc(doc.ref, { read: true })
+    );
+    
+    await Promise.all(updatePromises);
+    
+    return true;
+  } catch (error) {
+    console.error("Error marking all notifications as read:", error);
+    throw error;
+  }
+}
+
+export async function deleteNotification(notificationId: string) {
+  try {
+    await deleteDoc(doc(db, "notifications", notificationId));
+    return true;
+  } catch (error) {
+    console.error("Error deleting notification:", error);
+    throw error;
+  }
+}
+
+// Real-time notifications listener
+export function listenForUserNotifications(userId: string, callback: (notifications: Notification[]) => void) {
+  const notificationsQuery = query(
+    collection(db, "notifications"),
+    where("userId", "==", userId),
+    orderBy("timestamp", "desc")
+  );
+  
+  return onSnapshot(notificationsQuery, (snapshot) => {
+    const notifications = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Notification[];
+    
+    callback(notifications);
+  });
 }

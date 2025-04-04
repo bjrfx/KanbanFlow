@@ -5,6 +5,7 @@ import Home from "@/pages/home";
 import Board from "@/pages/board";
 import Calendar from "@/pages/calendar";
 import MyTasks from "@/pages/my-tasks";
+import Notifications from "@/pages/notifications";
 import { useEffect, useState } from "react";
 import { ProtectedRoute } from "./lib/protected-route";
 import AuthPage from "./pages/auth-page";
@@ -17,6 +18,7 @@ function Router() {
       <ProtectedRoute path="/board/:id" component={Board} />
       <ProtectedRoute path="/calendar" component={Calendar} />
       <ProtectedRoute path="/my-tasks" component={MyTasks} />
+      <ProtectedRoute path="/notifications" component={Notifications} />
       <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>

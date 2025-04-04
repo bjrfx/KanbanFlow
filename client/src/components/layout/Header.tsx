@@ -11,7 +11,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { 
-  Bell, 
   ChevronDown, 
   Columns, 
   LogOut, 
@@ -22,6 +21,7 @@ import {
   Settings, 
   Sun
 } from "lucide-react";
+import { NotificationDropdown } from "@/components/ui/notification-dropdown";
 import { ReactNode } from "react";
 import { Board as BoardType, getUserBoards } from "@/lib/firestore";
 import { useState } from "react";
@@ -156,12 +156,8 @@ export function Header({ toggleSidebar, currentBoardId, selectedBoard, title, ic
             <Search className="h-5 w-5 text-gray-600 dark:text-gray-300" />
           </Button>
           
-          {/* Notifications button */}
-          <Button variant="ghost" size="icon" onClick={() => handleComingSoon("Notifications")} className="relative">
-            <Bell className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-            {/* Notification dot */}
-            <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
-          </Button>
+          {/* Notifications dropdown */}
+          <NotificationDropdown />
           
           {/* Dark mode toggle */}
           <Button variant="ghost" size="icon" onClick={toggleDarkMode}>

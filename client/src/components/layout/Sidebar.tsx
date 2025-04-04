@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Columns, Calendar, CheckSquare, UserPlus, Users, Plus, Clipboard, Loader2 } from "lucide-react";
+import { Columns, Calendar, CheckSquare, UserPlus, Users, Plus, Clipboard, Loader2, Bell } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Board as BoardType, getUserBoards } from "@/lib/firestore";
 import { useQuery } from "@tanstack/react-query";
@@ -141,6 +141,22 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       "text-gray-400 dark:text-gray-500"
                   )} />
                   Calendar
+                </a>
+              </Link>
+              <Link href="/notifications">
+                <a className={cn(
+                  "flex items-center px-3 py-2 text-sm font-medium rounded-md",
+                  currentPath === "notifications" ? 
+                    "bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400" : 
+                    "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                )} onClick={() => isMobile && onClose()}>
+                  <Bell className={cn(
+                    "mr-3 h-4 w-4",
+                    currentPath === "notifications" ? 
+                      "text-primary-500" : 
+                      "text-gray-400 dark:text-gray-500"
+                  )} />
+                  Notifications
                 </a>
               </Link>
             </div>
