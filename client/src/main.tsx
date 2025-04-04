@@ -1,4 +1,5 @@
 import { createRoot } from "react-dom/client";
+import { StrictMode } from "react";
 import App from "./App";
 import "./index.css";
 import { ThemeProvider } from "./providers/ThemeProvider";
@@ -12,9 +13,11 @@ initializePWA().catch(error => {
 });
 
 createRoot(document.getElementById("root")!).render(
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider>
-      <App />
-    </ThemeProvider>
-  </QueryClientProvider>
+  <StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
+    </QueryClientProvider>
+  </StrictMode>
 );

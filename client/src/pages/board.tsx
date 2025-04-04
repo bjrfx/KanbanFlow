@@ -86,7 +86,8 @@ export default function Board() {
         <Header 
           toggleSidebar={toggleSidebar} 
           currentBoardId={id}
-          selectedBoard={board}
+          // Using the board from Firestore directly
+          selectedBoard={board as any}
         />
         
         {/* Simplified Board View - for now just showing columns */}
