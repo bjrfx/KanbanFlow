@@ -123,28 +123,40 @@ export async function getUserBoards(userId: string) {
   try {
     console.log("Getting boards for user:", userId);
     
-    // Get board memberships for the user
+    // First approach: Get boards directly by createdBy field
+    const boardsQuery = query(
+      collection(db, "boards"),
+      where("createdBy", "==", userId)
+    );
+    
+    const boardsSnapshot = await getDocs(boardsQuery);
+    console.log(`Found ${boardsSnapshot.size} boards created by user:`, userId);
+    
+    const boards: Board[] = boardsSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Board[];
+    
+    // Second approach: Get board memberships
     const membershipQuery = query(
       collection(db, "boardMembers"),
       where("userId", "==", userId)
     );
     
     const membershipSnapshots = await getDocs(membershipQuery);
-    console.log("Board memberships found:", membershipSnapshots.size);
+    console.log(`Found ${membershipSnapshots.size} board memberships for user:`, userId);
     
-    const boardIds = membershipSnapshots.docs.map(doc => doc.data().boardId);
-    console.log("Board IDs from memberships:", boardIds);
+    // Get board IDs from memberships, excluding those already in the boards array
+    const boardIdsFromCreated = boards.map(board => board.id);
+    const boardIdsFromMemberships = membershipSnapshots.docs
+      .map(doc => doc.data().boardId)
+      .filter(boardId => !boardIdsFromCreated.includes(boardId));
     
-    if (boardIds.length === 0) {
-      console.log("No board memberships found, returning empty array");
-      return [];
-    }
+    console.log("Additional board IDs from memberships:", boardIdsFromMemberships);
     
-    // Get all boards where the user is a member
-    const boards: Board[] = [];
-    
-    for (const boardId of boardIds) {
-      console.log("Fetching board with ID:", boardId);
+    // Fetch additional boards from memberships
+    for (const boardId of boardIdsFromMemberships) {
+      console.log("Fetching additional board with ID:", boardId);
       const boardDoc = await getDoc(doc(db, "boards", boardId));
       
       if (boardDoc.exists()) {
@@ -154,6 +166,13 @@ export async function getUserBoards(userId: string) {
         console.log("Board document doesn't exist for ID:", boardId);
       }
     }
+    
+    // Sort boards by creation time (newest first)
+    boards.sort((a, b) => {
+      const dateA = a.createdAt ? a.createdAt.toDate().getTime() : 0;
+      const dateB = b.createdAt ? b.createdAt.toDate().getTime() : 0;
+      return dateB - dateA;
+    });
     
     console.log("Final boards list:", boards);
     return boards;
@@ -342,19 +361,29 @@ export async function getBoardTasks(boardId: string) {
 
 export async function getColumnTasks(columnId: string) {
   try {
+    console.log("Getting tasks for column:", columnId);
+    
     const tasksQuery = query(
       collection(db, "tasks"),
       where("columnId", "==", columnId)
     );
     
     const tasksSnapshots = await getDocs(tasksQuery);
-    const tasks = tasksSnapshots.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    })) as Task[];
+    console.log(`Found ${tasksSnapshots.size} tasks for column ${columnId}`);
+    
+    const tasks = tasksSnapshots.docs.map(doc => {
+      console.log(`Task document ID: ${doc.id}, data:`, doc.data());
+      return {
+        id: doc.id,
+        ...doc.data()
+      };
+    }) as Task[];
     
     // Sort tasks by order
-    return tasks.sort((a, b) => a.order - b.order);
+    const sortedTasks = tasks.sort((a, b) => a.order - b.order);
+    console.log("Returning sorted tasks:", sortedTasks);
+    
+    return sortedTasks;
   } catch (error) {
     console.error("Error getting column tasks:", error);
     throw error;
@@ -363,6 +392,8 @@ export async function getColumnTasks(columnId: string) {
 
 export async function createTask(userId: string, data: Omit<Task, 'id' | 'createdBy' | 'createdAt' | 'updatedAt'>) {
   try {
+    console.log("Creating task:", { userId, data });
+    
     const taskData = {
       ...data,
       createdBy: userId,
@@ -370,10 +401,16 @@ export async function createTask(userId: string, data: Omit<Task, 'id' | 'create
       updatedAt: serverTimestamp()
     };
     
-    const taskRef = await addDoc(collection(db, "tasks"), taskData);
-    const taskSnapshot = await getDoc(taskRef);
+    console.log("Task data to be saved:", taskData);
     
-    return { id: taskRef.id, ...taskSnapshot.data() } as Task;
+    const taskRef = await addDoc(collection(db, "tasks"), taskData);
+    console.log("Task created with ID:", taskRef.id);
+    
+    const taskSnapshot = await getDoc(taskRef);
+    const task = { id: taskRef.id, ...taskSnapshot.data() } as Task;
+    
+    console.log("Returning task:", task);
+    return task;
   } catch (error) {
     console.error("Error creating task:", error);
     throw error;

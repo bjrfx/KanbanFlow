@@ -87,11 +87,16 @@ export default function Board() {
       
       const columnTasksMap: {[columnId: string]: TaskType[]} = {};
       
+      console.log("Fetching tasks for columns:", columns);
+      
       for (const column of columns) {
+        console.log("Getting tasks for column:", column.id);
         const tasks = await getColumnTasks(column.id);
+        console.log(`Got ${tasks.length} tasks for column ${column.id}:`, tasks);
         columnTasksMap[column.id] = tasks;
       }
       
+      console.log("Final columnTasksMap:", columnTasksMap);
       return columnTasksMap;
     },
     enabled: !!columns && columns.length > 0,
@@ -109,13 +114,31 @@ export default function Board() {
         order: tasksData?.[columnId]?.length || 0,
       });
     },
-    onSuccess: () => {
+    onSuccess: (newTask) => {
+      console.log("Task created successfully:", newTask);
+      
       // Reset form
       setNewTaskTitle("");
       setAddingToColumn(null);
       
-      // Invalidate tasks query to refetch
-      queryClient.invalidateQueries({ queryKey: ['tasks', id] });
+      // Force refetch all tasks
+      setTimeout(() => {
+        // Invalidate tasks query to refetch after a slight delay (this helps with serverTimestamp processing)
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        
+        // Manually update the UI with the new task
+        if (tasksData) {
+          const columnId = newTask.columnId;
+          const updatedTasksData = { ...tasksData };
+          
+          if (!updatedTasksData[columnId]) {
+            updatedTasksData[columnId] = [];
+          }
+          
+          updatedTasksData[columnId] = [...updatedTasksData[columnId], newTask];
+          queryClient.setQueryData(['tasks', id], updatedTasksData);
+        }
+      }, 500);
       
       // Show success toast
       toast({
