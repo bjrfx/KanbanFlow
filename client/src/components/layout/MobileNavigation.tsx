@@ -33,13 +33,15 @@ export function MobileNavigation({ onAddTask }: MobileNavigationProps) {
           </a>
         </Link>
         
-        <button 
-          onClick={handleComingSoon}
-          className="flex flex-col items-center py-2 px-4 text-gray-500 dark:text-gray-400 bg-transparent border-0"
-        >
-          <CheckSquare className="h-5 w-5" />
-          <span className="text-xs mt-1">My Tasks</span>
-        </button>
+        <Link href="/my-tasks">
+          <a className={cn(
+            "flex flex-col items-center py-2 px-4",
+            path === "my-tasks" ? "text-primary" : "text-gray-500 dark:text-gray-400"
+          )}>
+            <CheckSquare className="h-5 w-5" />
+            <span className="text-xs mt-1">My Tasks</span>
+          </a>
+        </Link>
         
         <div className="flex flex-col items-center py-2 px-4 text-gray-500 dark:text-gray-400">
           <Button 

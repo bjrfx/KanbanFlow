@@ -48,6 +48,9 @@ export interface Task {
   createdBy: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  // Additional properties for UI display (not stored in Firestore)
+  boardName?: string;
+  columnName?: string;
 }
 
 export interface BoardMember {
@@ -544,6 +547,67 @@ export async function removeBoardMember(memberId: string) {
     return true;
   } catch (error) {
     console.error("Error removing board member:", error);
+    throw error;
+  }
+}
+
+// My Tasks helper
+export async function getUserAssignedTasks(userId: string) {
+  try {
+    console.log("Getting tasks assigned to user:", userId);
+    
+    // Get user's boards
+    const boards = await getUserBoards(userId);
+    console.log(`Found ${boards.length} boards for user`);
+    
+    // Create an empty array to store all tasks
+    let allAssignedTasks: Task[] = [];
+    
+    // For each board, get tasks assigned to the user
+    for (const board of boards) {
+      // First get all tasks for the board
+      const boardTasks = await getBoardTasks(board.id);
+      
+      // Filter for tasks assigned to the user
+      const assignedTasks = boardTasks.filter(task => 
+        task.assignedTo && task.assignedTo.includes(userId)
+      );
+      
+      // If there are assigned tasks, fetch column info for each task
+      if (assignedTasks.length > 0) {
+        // Fetch all columns for this board once to avoid multiple queries
+        const columns = await getBoardColumns(board.id);
+        const columnsMap = new Map(columns.map(col => [col.id, col]));
+        
+        // Add board name and column name to each task
+        const enhancedTasks = assignedTasks.map(task => ({
+          ...task,
+          boardName: board.name,
+          columnName: columnsMap.get(task.columnId)?.name || "Unknown"
+        }));
+        
+        // Add these tasks to the overall array
+        allAssignedTasks = [...allAssignedTasks, ...enhancedTasks];
+      }
+    }
+    
+    // Sort tasks by due date (tasks with due dates first, then by date)
+    allAssignedTasks.sort((a, b) => {
+      // If both have due dates, sort by date
+      if (a.dueDate && b.dueDate) {
+        return a.dueDate.toDate().getTime() - b.dueDate.toDate().getTime();
+      }
+      // If only a has a due date, it comes first
+      if (a.dueDate && !b.dueDate) return -1;
+      // If only b has a due date, it comes first
+      if (!a.dueDate && b.dueDate) return 1;
+      // If neither has a due date, sort by updated date (most recent first)
+      return b.updatedAt.toDate().getTime() - a.updatedAt.toDate().getTime();
+    });
+    
+    return allAssignedTasks;
+  } catch (error) {
+    console.error("Error getting user assigned tasks:", error);
     throw error;
   }
 }
