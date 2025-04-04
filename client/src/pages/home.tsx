@@ -7,26 +7,63 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useQuery } from "@tanstack/react-query";
-import { Board } from "@/types";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { ClipboardList, Loader2, Plus } from "lucide-react";
 import { useLocation } from "wouter";
-import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { Board, createBoard, getUserBoards } from "@/lib/firestore";
+import { useToast } from "@/hooks/use-toast";
+import { Timestamp } from "firebase/firestore";
 
 export default function Home() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [, navigate] = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCreatingBoard, setIsCreatingBoard] = useState(false);
   const [newBoardName, setNewBoardName] = useState("");
   const [newBoardDescription, setNewBoardDescription] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
   
+  // Fetch user boards from Firestore
   const { data: boards, isLoading } = useQuery<Board[]>({
-    queryKey: ['/api/boards'],
+    queryKey: ['boards', user?.uid],
+    queryFn: () => user ? getUserBoards(user.uid) : Promise.resolve([]),
+    enabled: !!user,
+  });
+  
+  // Create board mutation
+  const createBoardMutation = useMutation({
+    mutationFn: async (data: { name: string; description?: string }) => {
+      if (!user) throw new Error("User not authenticated");
+      return createBoard(user.uid, data);
+    },
+    onSuccess: (newBoard) => {
+      // Invalidate boards query to refetch
+      queryClient.invalidateQueries({ queryKey: ['boards', user?.uid] });
+      
+      // Reset form and close
+      setNewBoardName('');
+      setNewBoardDescription('');
+      setIsCreatingBoard(false);
+      
+      // Show success toast
+      toast({
+        title: "Board created",
+        description: "Your new board has been created successfully.",
+      });
+      
+      // Navigate to the new board
+      navigate(`/board/${newBoard.id}`);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error creating board",
+        description: error.message || "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    },
   });
   
   const toggleSidebar = () => {
@@ -40,31 +77,10 @@ export default function Home() {
       return;
     }
     
-    setIsSubmitting(true);
-    
-    try {
-      const response = await apiRequest('POST', '/api/boards', {
-        name: newBoardName,
-        description: newBoardDescription
-      });
-      
-      const newBoard = await response.json();
-      
-      // Invalidate boards query
-      queryClient.invalidateQueries({ queryKey: ['/api/boards'] });
-      
-      // Reset form and close
-      setNewBoardName('');
-      setNewBoardDescription('');
-      setIsCreatingBoard(false);
-      
-      // Navigate to the new board
-      navigate(`/board/${newBoard.id}`);
-    } catch (error) {
-      console.error('Error creating board:', error);
-    } finally {
-      setIsSubmitting(false);
-    }
+    createBoardMutation.mutate({
+      name: newBoardName,
+      description: newBoardDescription || undefined
+    });
   };
   
   return (
@@ -130,9 +146,9 @@ export default function Home() {
                         </Button>
                         <Button 
                           type="submit"
-                          disabled={isSubmitting || !newBoardName.trim()}
+                          disabled={createBoardMutation.isPending || !newBoardName.trim()}
                         >
-                          {isSubmitting ? (
+                          {createBoardMutation.isPending ? (
                             <>
                               <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -169,10 +185,10 @@ export default function Home() {
                         </CardHeader>
                         <CardFooter className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
                           <span>
-                            Created: {format(new Date(board.createdAt), "MMM d, yyyy")}
+                            Created: {format(board.createdAt.toDate(), "MMM d, yyyy")}
                           </span>
                           <span>
-                            Updated: {format(new Date(board.updatedAt), "MMM d, yyyy")}
+                            Updated: {format(board.updatedAt.toDate(), "MMM d, yyyy")}
                           </span>
                         </CardFooter>
                       </Card>

@@ -15,9 +15,11 @@ import { Label } from "@/components/ui/label";
 import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
 import React from "react";
+import { FcGoogle } from "react-icons/fc";
+import { Separator } from "@/components/ui/separator";
 
 const AuthPage = () => {
-  const { user, loginMutation, registerMutation } = useAuth();
+  const { user, loginMutation, registerMutation, googleLogin } = useAuth();
   const [, navigate] = useLocation();
 
   // Redirect to home if user is logged in
@@ -54,6 +56,10 @@ const AuthPage = () => {
       password: registerPassword,
       confirmPassword: registerConfirmPassword,
     });
+  };
+  
+  const handleGoogleLogin = () => {
+    googleLogin();
   };
 
   return (
@@ -100,7 +106,7 @@ const AuthPage = () => {
                     />
                   </div>
                 </CardContent>
-                <CardFooter>
+                <CardFooter className="flex flex-col space-y-4">
                   <Button
                     type="submit"
                     className="w-full"
@@ -114,6 +120,22 @@ const AuthPage = () => {
                     ) : (
                       "Sign In"
                     )}
+                  </Button>
+                  
+                  <div className="flex items-center">
+                    <Separator className="flex-1" />
+                    <span className="px-3 text-xs text-muted-foreground">OR</span>
+                    <Separator className="flex-1" />
+                  </div>
+                  
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={handleGoogleLogin} 
+                    className="w-full"
+                  >
+                    <FcGoogle className="mr-2 h-5 w-5" />
+                    Sign in with Google
                   </Button>
                 </CardFooter>
               </form>
@@ -173,7 +195,7 @@ const AuthPage = () => {
                     />
                   </div>
                 </CardContent>
-                <CardFooter>
+                <CardFooter className="flex flex-col space-y-4">
                   <Button
                     type="submit"
                     className="w-full"
@@ -187,6 +209,22 @@ const AuthPage = () => {
                     ) : (
                       "Sign Up"
                     )}
+                  </Button>
+                  
+                  <div className="flex items-center">
+                    <Separator className="flex-1" />
+                    <span className="px-3 text-xs text-muted-foreground">OR</span>
+                    <Separator className="flex-1" />
+                  </div>
+                  
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={handleGoogleLogin} 
+                    className="w-full"
+                  >
+                    <FcGoogle className="mr-2 h-5 w-5" />
+                    Sign up with Google
                   </Button>
                 </CardFooter>
               </form>

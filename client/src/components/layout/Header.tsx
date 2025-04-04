@@ -166,9 +166,9 @@ export function Header({ toggleSidebar, currentBoardId, selectedBoard }: HeaderP
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full p-0">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src={user?.avatar} alt={user?.username} />
+                  <AvatarImage src={user?.photoURL || undefined} alt={user?.displayName || 'User'} />
                   <AvatarFallback className="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-                    {user?.username.charAt(0).toUpperCase()}
+                    {user?.displayName ? user.displayName.charAt(0).toUpperCase() : user?.email?.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
               </Button>
@@ -177,7 +177,7 @@ export function Header({ toggleSidebar, currentBoardId, selectedBoard }: HeaderP
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium">{user?.username}</p>
+                  <p className="text-sm font-medium">{user?.displayName || 'User'}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{user?.email}</p>
                 </div>
               </DropdownMenuLabel>

@@ -1,32 +1,39 @@
-import React, { createContext, ReactNode, useContext } from "react";
+import React, { createContext, ReactNode, useContext, useEffect, useState } from "react";
 import {
-  useQuery,
   useMutation,
   UseMutationResult,
 } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "../lib/queryClient";
 import { useToast } from "../hooks/use-toast";
 import { z } from "zod";
 import { useLocation } from "wouter";
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  updateProfile,
+  signInWithPopup,
+  GoogleAuthProvider,
+  User as FirebaseUser
+} from "firebase/auth";
+import { auth } from "../lib/firebase";
+import { queryClient } from "../lib/queryClient";
 
-// Since we can't directly import from shared schema (due to path issues), define types here
+// Define the user type based on Firebase Auth
 export type SelectUser = {
-  id: number;
-  email: string;
-  username: string;
-  avatar?: string;
-  googleId?: string;
-  password?: string;
-  createdAt?: Date;
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL?: string | null;
 };
 
 export type AuthContextType = {
   user: SelectUser | null;
   isLoading: boolean;
   error: Error | null;
-  loginMutation: UseMutationResult<any, Error, LoginData>;
+  loginMutation: UseMutationResult<SelectUser, Error, LoginData>;
   logoutMutation: UseMutationResult<void, Error, void>;
-  registerMutation: UseMutationResult<RegisterResponse, Error, RegisterData>;
+  registerMutation: UseMutationResult<SelectUser, Error, RegisterData>;
   googleLogin: () => void;
   isAuthenticated: boolean;
 };
@@ -52,10 +59,15 @@ const registerSchema = userSchema.extend({
 
 export type RegisterData = z.infer<typeof registerSchema>;
 
-export type RegisterResponse = {
-  user: SelectUser;
-  defaultBoardId: number;
-  token?: string;
+// Helper to convert Firebase user to our user type
+const mapFirebaseUser = (fbUser: FirebaseUser | null): SelectUser | null => {
+  if (!fbUser) return null;
+  return {
+    uid: fbUser.uid,
+    email: fbUser.email,
+    displayName: fbUser.displayName,
+    photoURL: fbUser.photoURL,
+  };
 };
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -63,59 +75,41 @@ export const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
   const [, navigate] = useLocation();
+  const [user, setUser] = useState<SelectUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
   
-  const {
-    data: user,
-    error,
-    isLoading,
-  } = useQuery<SelectUser | null, Error>({
-    queryKey: ["/api/auth/user"],
-    queryFn: async () => {
-      try {
-        // Get the token from localStorage
-        const token = localStorage.getItem("auth_token");
-        const headers: Record<string, string> = {};
-        
-        if (token) {
-          headers["Authorization"] = `Bearer ${token}`;
-        }
-        
-        const res = await fetch("/api/auth/user", {
-          credentials: "include",
-          headers,
-        });
-        
-        if (!res.ok) {
-          if (res.status === 401) {
-            return null;
-          }
-          throw new Error("Failed to fetch user");
-        }
-        
-        const data = await res.json();
-        return data.user;
-      } catch (error) {
-        console.error("Error fetching user:", error);
-        return null;
+  // Listen for auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, 
+      (firebaseUser) => {
+        setUser(mapFirebaseUser(firebaseUser));
+        setIsLoading(false);
+      },
+      (error) => {
+        console.error("Auth state change error:", error);
+        setError(error as Error);
+        setIsLoading(false);
       }
-    },
-  });
+    );
+    
+    // Cleanup subscription
+    return () => unsubscribe();
+  }, []);
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginData) => {
-      const res = await apiRequest("POST", "/api/auth/login", credentials);
-      const data = await res.json();
-      return data; // Return full response including token
+      const userCredential = await signInWithEmailAndPassword(
+        auth, 
+        credentials.email, 
+        credentials.password
+      );
+      return mapFirebaseUser(userCredential.user)!;
     },
-    onSuccess: (data: any) => {
-      // Store the token in localStorage
-      if (data.token) {
-        localStorage.setItem("auth_token", data.token);
-      }
-      queryClient.setQueryData(["/api/auth/user"], data.user || data);
+    onSuccess: (data: SelectUser) => {
       toast({
         title: "Login successful",
-        description: `Welcome back, ${(data.user || data).username}!`,
+        description: `Welcome back${data.displayName ? ', ' + data.displayName : ''}!`,
       });
       navigate("/");
     },
@@ -130,20 +124,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const registerMutation = useMutation({
     mutationFn: async (data: RegisterData) => {
-      const res = await apiRequest("POST", "/api/auth/register", data);
-      return await res.json();
+      // Create user with email and password
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        data.email,
+        data.password
+      );
+      
+      // Update profile with username
+      await updateProfile(userCredential.user, {
+        displayName: data.username
+      });
+      
+      // Return the user with updated profile
+      return mapFirebaseUser(auth.currentUser)!;
     },
-    onSuccess: (data: RegisterResponse) => {
-      // Store the token in localStorage
-      if (data.token) {
-        localStorage.setItem("auth_token", data.token);
-      }
-      queryClient.setQueryData(["/api/auth/user"], data.user);
+    onSuccess: (user: SelectUser) => {
       toast({
         title: "Registration successful",
         description: "Your account has been created.",
       });
-      navigate(`/board/${data.defaultBoardId}`);
+      navigate("/");
     },
     onError: (error: Error) => {
       toast({
@@ -156,12 +157,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", "/api/auth/logout");
+      await signOut(auth);
     },
     onSuccess: () => {
-      // Remove token from localStorage
-      localStorage.removeItem("auth_token");
-      queryClient.setQueryData(["/api/auth/user"], null);
+      // Clear any cached user data
+      queryClient.clear();
       toast({
         title: "Logged out",
         description: "You have been successfully logged out.",
@@ -177,16 +177,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
   
-  function googleLogin() {
-    window.location.href = "/api/auth/google";
-  }
+  const googleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      toast({
+        title: "Login successful",
+        description: "You've signed in with Google",
+      });
+      navigate("/");
+    } catch (error: any) {
+      toast({
+        title: "Google login failed",
+        description: error.message || "Could not sign in with Google",
+        variant: "destructive",
+      });
+    }
+  };
 
   const isAuthenticated = !!user;
 
   return (
     <AuthContext.Provider
       value={{
-        user: user || null,
+        user,
         isLoading,
         error,
         loginMutation,

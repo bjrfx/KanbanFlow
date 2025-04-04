@@ -1,0 +1,71 @@
+// Firestore security rules
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Basic profile read access - user can read their own profile
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Boards: User can read/write their own boards (via board membership)
+    match /boards/{boardId} {
+      // Function to check if user is a board member
+      function isBoardMember() {
+        return request.auth != null && exists(/databases/$(database)/documents/boardMembers/$(request.auth.uid + '_' + boardId));
+      }
+      
+      // Only board members can read boards
+      allow read: if isBoardMember();
+      
+      // Only board owner can update or delete boards
+      allow update, delete: if request.auth != null && 
+        exists(/databases/$(database)/documents/boardMembers/$(request.auth.uid + '_' + boardId)) &&
+        get(/databases/$(database)/documents/boardMembers/$(request.auth.uid + '_' + boardId)).data.role == 'owner';
+        
+      // Any authenticated user can create boards (membership will be added after creation)
+      allow create: if request.auth != null && request.resource.data.createdBy == request.auth.uid;
+    }
+    
+    // Board members: Control who has access to a board
+    match /boardMembers/{membershipId} {
+      allow read: if request.auth != null;
+      
+      // Only the board owner can add/remove members
+      allow create, delete: if request.auth != null && 
+        (membershipId.split('_')[0] == request.auth.uid || 
+        exists(/databases/$(database)/documents/boardMembers/$(request.auth.uid + '_' + membershipId.split('_')[1])) &&
+        get(/databases/$(database)/documents/boardMembers/$(request.auth.uid + '_' + membershipId.split('_')[1])).data.role == 'owner');
+    }
+    
+    // Columns: Board members can manage columns
+    match /columns/{columnId} {
+      allow read: if request.auth != null && 
+        exists(/databases/$(database)/documents/boardMembers/$(request.auth.uid + '_' + resource.data.boardId));
+      
+      // Board owners and editors can create/update/delete columns
+      allow write: if request.auth != null && 
+        exists(/databases/$(database)/documents/boardMembers/$(request.auth.uid + '_' + resource.data.boardId)) &&
+        (get(/databases/$(database)/documents/boardMembers/$(request.auth.uid + '_' + resource.data.boardId)).data.role == 'owner' ||
+         get(/databases/$(database)/documents/boardMembers/$(request.auth.uid + '_' + resource.data.boardId)).data.role == 'editor');
+    }
+    
+    // Tasks: Board members can manage tasks
+    match /tasks/{taskId} {
+      allow read: if request.auth != null && 
+        exists(/databases/$(database)/documents/boardMembers/$(request.auth.uid + '_' + resource.data.boardId));
+      
+      // All board members can create tasks
+      allow create: if request.auth != null && 
+        exists(/databases/$(database)/documents/boardMembers/$(request.auth.uid + '_' + request.resource.data.boardId));
+      
+      // Only task creator, assignees, or board owners/editors can update/delete tasks
+      allow update, delete: if request.auth != null && 
+        (resource.data.createdBy == request.auth.uid || 
+         (resource.data.assignedTo != null && request.auth.uid in resource.data.assignedTo) ||
+         exists(/databases/$(database)/documents/boardMembers/$(request.auth.uid + '_' + resource.data.boardId)) &&
+         (get(/databases/$(database)/documents/boardMembers/$(request.auth.uid + '_' + resource.data.boardId)).data.role == 'owner' ||
+          get(/databases/$(database)/documents/boardMembers/$(request.auth.uid + '_' + resource.data.boardId)).data.role == 'editor'));
+    }
+  }
+}
