@@ -24,7 +24,7 @@ export type AuthContextType = {
   user: SelectUser | null;
   isLoading: boolean;
   error: Error | null;
-  loginMutation: UseMutationResult<SelectUser, Error, LoginData>;
+  loginMutation: UseMutationResult<any, Error, LoginData>;
   logoutMutation: UseMutationResult<void, Error, void>;
   registerMutation: UseMutationResult<RegisterResponse, Error, RegisterData>;
   googleLogin: () => void;
@@ -55,6 +55,7 @@ export type RegisterData = z.infer<typeof registerSchema>;
 export type RegisterResponse = {
   user: SelectUser;
   defaultBoardId: number;
+  token?: string;
 };
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -71,8 +72,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryKey: ["/api/auth/user"],
     queryFn: async () => {
       try {
+        // Get the token from localStorage
+        const token = localStorage.getItem("auth_token");
+        const headers: Record<string, string> = {};
+        
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+        
         const res = await fetch("/api/auth/user", {
           credentials: "include",
+          headers,
         });
         
         if (!res.ok) {
@@ -95,13 +105,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     mutationFn: async (credentials: LoginData) => {
       const res = await apiRequest("POST", "/api/auth/login", credentials);
       const data = await res.json();
-      return data.user;
+      return data; // Return full response including token
     },
-    onSuccess: (user: SelectUser) => {
-      queryClient.setQueryData(["/api/auth/user"], user);
+    onSuccess: (data: any) => {
+      // Store the token in localStorage
+      if (data.token) {
+        localStorage.setItem("auth_token", data.token);
+      }
+      queryClient.setQueryData(["/api/auth/user"], data.user || data);
       toast({
         title: "Login successful",
-        description: `Welcome back, ${user.username}!`,
+        description: `Welcome back, ${(data.user || data).username}!`,
       });
       navigate("/");
     },
@@ -120,6 +134,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return await res.json();
     },
     onSuccess: (data: RegisterResponse) => {
+      // Store the token in localStorage
+      if (data.token) {
+        localStorage.setItem("auth_token", data.token);
+      }
       queryClient.setQueryData(["/api/auth/user"], data.user);
       toast({
         title: "Registration successful",
@@ -141,12 +159,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await apiRequest("POST", "/api/auth/logout");
     },
     onSuccess: () => {
+      // Remove token from localStorage
+      localStorage.removeItem("auth_token");
       queryClient.setQueryData(["/api/auth/user"], null);
       toast({
         title: "Logged out",
         description: "You have been successfully logged out.",
       });
-      navigate("/login");
+      navigate("/auth");
     },
     onError: (error: Error) => {
       toast({
