@@ -63,11 +63,17 @@ export async function createBoard(userId: string, data: { name: string, descript
   try {
     console.log("Creating board for user:", userId, "with data:", data);
     
+    // Create client-side timestamps for immediate display
+    const clientTimestamp = new Timestamp(Math.floor(Date.now() / 1000), 0);
+    
     const boardData = {
       ...data,
       createdBy: userId,
       createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
+      // Add client-side timestamps for immediate UI updates
+      _clientCreatedAt: clientTimestamp,
+      _clientUpdatedAt: clientTimestamp
     };
     
     console.log("Prepared board data:", boardData);
@@ -97,24 +103,31 @@ export async function createBoard(userId: string, data: { name: string, descript
     
     console.log("Creating default columns for board:", boardRef.id);
     
-    for (const column of defaultColumns) {
+    // Create columns in parallel for faster operation
+    await Promise.all(defaultColumns.map(async (column) => {
       const columnData = {
         ...column,
         boardId: boardRef.id,
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        // Add client-side timestamps for immediate UI updates
+        _clientCreatedAt: clientTimestamp,
+        _clientUpdatedAt: clientTimestamp
       };
       
       const columnRef = await addDoc(collection(db, "columns"), columnData);
       console.log(`Column "${column.name}" created with ID:`, columnRef.id);
-    }
+    }));
     
-    // Get the complete board data
-    const boardSnapshot = await getDoc(boardRef);
-    const board = { id: boardRef.id, ...boardSnapshot.data() } as Board;
-    console.log("Returning new board:", board);
-    
-    return board;
+    // Return a board object with client timestamps that will show up immediately
+    // This helps with immediate display in the UI
+    return {
+      id: boardRef.id,
+      ...data,
+      createdBy: userId,
+      createdAt: clientTimestamp,
+      updatedAt: clientTimestamp
+    } as Board;
   } catch (error) {
     console.error("Error creating board:", error);
     throw error;
@@ -396,11 +409,17 @@ export async function createTask(userId: string, data: Omit<Task, 'id' | 'create
   try {
     console.log("Creating task:", { userId, data });
     
+    // Create client-side timestamps for immediate display
+    const clientTimestamp = new Timestamp(Math.floor(Date.now() / 1000), 0);
+    
     const taskData = {
       ...data,
       createdBy: userId,
       createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
+      // Add client-side timestamps for immediate UI updates
+      _clientCreatedAt: clientTimestamp,
+      _clientUpdatedAt: clientTimestamp
     };
     
     console.log("Task data to be saved:", taskData);
@@ -408,11 +427,14 @@ export async function createTask(userId: string, data: Omit<Task, 'id' | 'create
     const taskRef = await addDoc(collection(db, "tasks"), taskData);
     console.log("Task created with ID:", taskRef.id);
     
-    const taskSnapshot = await getDoc(taskRef);
-    const task = { id: taskRef.id, ...taskSnapshot.data() } as Task;
-    
-    console.log("Returning task:", task);
-    return task;
+    // Return a task object with client timestamps that will show up immediately
+    return {
+      id: taskRef.id,
+      ...data,
+      createdBy: userId,
+      createdAt: clientTimestamp,
+      updatedAt: clientTimestamp
+    } as Task;
   } catch (error) {
     console.error("Error creating task:", error);
     throw error;
@@ -423,13 +445,31 @@ export async function updateTask(taskId: string, data: Partial<Omit<Task, 'id' |
   try {
     const taskRef = doc(db, "tasks", taskId);
     
+    // Create client-side timestamp for immediate display
+    const clientTimestamp = new Timestamp(Math.floor(Date.now() / 1000), 0);
+    
+    // First, get the current task data
+    const taskSnapshot = await getDoc(taskRef);
+    if (!taskSnapshot.exists()) {
+      throw new Error("Task not found");
+    }
+    
+    const currentTask = { id: taskSnapshot.id, ...taskSnapshot.data() } as Task;
+    
+    // Update with server timestamp
     await updateDoc(taskRef, {
       ...data,
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
+      // Add client-side timestamp for immediate UI updates
+      _clientUpdatedAt: clientTimestamp
     });
     
-    const updatedTask = await getDoc(taskRef);
-    return { id: updatedTask.id, ...updatedTask.data() } as Task;
+    // Return an immediately updated task object with client timestamp
+    return {
+      ...currentTask,
+      ...data,
+      updatedAt: clientTimestamp
+    } as Task;
   } catch (error) {
     console.error("Error updating task:", error);
     throw error;
