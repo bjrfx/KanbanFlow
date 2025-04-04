@@ -59,6 +59,8 @@ export interface BoardMember {
 // Boards
 export async function createBoard(userId: string, data: { name: string, description?: string }) {
   try {
+    console.log("Creating board for user:", userId, "with data:", data);
+    
     const boardData = {
       ...data,
       createdBy: userId,
@@ -66,16 +68,23 @@ export async function createBoard(userId: string, data: { name: string, descript
       updatedAt: serverTimestamp()
     };
     
+    console.log("Prepared board data:", boardData);
+    
     // Add the board document
     const boardRef = await addDoc(collection(db, "boards"), boardData);
+    console.log("Board created with ID:", boardRef.id);
     
     // Add board membership for the creator with 'owner' role
-    await addDoc(collection(db, "boardMembers"), {
+    const membershipData = {
       boardId: boardRef.id,
       userId,
       role: 'owner',
       joinedAt: serverTimestamp()
-    });
+    };
+    console.log("Adding board membership:", membershipData);
+    
+    const membershipRef = await addDoc(collection(db, "boardMembers"), membershipData);
+    console.log("Board membership created with ID:", membershipRef.id);
     
     // Create default columns
     const defaultColumns = [
@@ -84,18 +93,26 @@ export async function createBoard(userId: string, data: { name: string, descript
       { name: 'Done', order: 2, color: '#10b981' }
     ];
     
+    console.log("Creating default columns for board:", boardRef.id);
+    
     for (const column of defaultColumns) {
-      await addDoc(collection(db, "columns"), {
+      const columnData = {
         ...column,
         boardId: boardRef.id,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
-      });
+      };
+      
+      const columnRef = await addDoc(collection(db, "columns"), columnData);
+      console.log(`Column "${column.name}" created with ID:`, columnRef.id);
     }
     
     // Get the complete board data
     const boardSnapshot = await getDoc(boardRef);
-    return { id: boardRef.id, ...boardSnapshot.data() } as Board;
+    const board = { id: boardRef.id, ...boardSnapshot.data() } as Board;
+    console.log("Returning new board:", board);
+    
+    return board;
   } catch (error) {
     console.error("Error creating board:", error);
     throw error;
@@ -104,6 +121,8 @@ export async function createBoard(userId: string, data: { name: string, descript
 
 export async function getUserBoards(userId: string) {
   try {
+    console.log("Getting boards for user:", userId);
+    
     // Get board memberships for the user
     const membershipQuery = query(
       collection(db, "boardMembers"),
@@ -111,20 +130,32 @@ export async function getUserBoards(userId: string) {
     );
     
     const membershipSnapshots = await getDocs(membershipQuery);
-    const boardIds = membershipSnapshots.docs.map(doc => doc.data().boardId);
+    console.log("Board memberships found:", membershipSnapshots.size);
     
-    if (boardIds.length === 0) return [];
+    const boardIds = membershipSnapshots.docs.map(doc => doc.data().boardId);
+    console.log("Board IDs from memberships:", boardIds);
+    
+    if (boardIds.length === 0) {
+      console.log("No board memberships found, returning empty array");
+      return [];
+    }
     
     // Get all boards where the user is a member
     const boards: Board[] = [];
     
     for (const boardId of boardIds) {
+      console.log("Fetching board with ID:", boardId);
       const boardDoc = await getDoc(doc(db, "boards", boardId));
+      
       if (boardDoc.exists()) {
+        console.log("Board exists, adding to list:", boardDoc.id);
         boards.push({ id: boardDoc.id, ...boardDoc.data() } as Board);
+      } else {
+        console.log("Board document doesn't exist for ID:", boardId);
       }
     }
     
+    console.log("Final boards list:", boards);
     return boards;
   } catch (error) {
     console.error("Error getting user boards:", error);
